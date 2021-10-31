@@ -69,6 +69,17 @@ exports.handler = function (event, context, callback) {
       connection.end();
       sendResponse(event, context, 'SUCCESS', { 'Message': 'Resource creation successful!',  'admin_pass': admin_pass, 'db_pass': db_pass });
   }
+    else if (event.RequestType === 'Delete') {
+      // Create database
+      let query = "DROP DATABASE " + stack;
+      execute_query(query, connection);
+      //create user
+      query = "DROP USER '" + user + "'@'%';";
+      execute_query(query, connection);
+      // Close Database connection.
+      connection.end();
+      sendResponse(event, context, 'SUCCESS', { 'Message': 'Resource creation successful!',  'admin_pass': admin_pass, 'db_pass': db_pass });
+  }
 
 }
 
