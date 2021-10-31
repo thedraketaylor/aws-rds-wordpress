@@ -1,91 +1,42 @@
-var mysql = require('mysql');
-
-
-function create_connection(db_host, db_user, master_db_pass) {
-    var connection = mysql.createConnection({
-      host     : db_host,
-      user     : db_user,
-      password : master_db_pass
-    });
-    
-    connection.connect();
-    
-    return connection;
-    
-}
-
-
-function generate_password(len) {
-    var result           = '';
-    var characters       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    var charactersLength = characters.length;
-    for ( var i = 0; i < len; i++ ) {
-      result += characters.charAt(Math.floor(Math.random() * 
- charactersLength));
-   }
-   return result;
-}
-
-
-function execute_query(query, connection) {
-    connection.query(query, function(err, rows, fields) {
-        if(err) throw err;
-    });
-  
-}
-
-
-exports.handler = function (event, context, callback) {
-    console.log("LOGGING");
-    console.log(event.ResourceProperties);
-    
-    let stack = event.ResourceProperties.stack;
-    let user = event.ResourceProperties.stack;
-    let db_host = event.ResourceProperties.host;
-    let db_user = event.ResourceProperties.db_user;
-    let master_db_pass = event.ResourceProperties.db_pass;
-    
-    const connection = create_connection(db_host, db_user, master_db_pass);
-    
-    const admin_pass = generate_password(8);
-    const db_pass = generate_password(24);
-
-    setupWatchdogTimer(event, context, callback);
-    if (event.RequestType === 'Create') {
-      // Create database
-      let query = "CREATE DATABASE " + stack;
-      execute_query(query, connection);
-      //create user
-      query = "CREATE USER '" + user + "'@'%' IDENTIFIED BY '" + db_pass + "';";
-      execute_query(query, connection);
-      //Grant access 
-      query = "GRANT ALL PRIVILEGES ON " + stack + ". * TO '" + user + "'@'%';";
-      execute_query(query, connection);
+  var AWS = require('aws-sdk'),
+      region = process.env.AWS_REGION,
+      secretName = secretName,
+      secret,
+      decodedBinarySecret;
       
-      // Flush privileges
-      query = "FLUSH PRIVILEGES;";
-      execute_query(query, connection);
-      // Close Database connection.
-      connection.end();
-      sendResponse(event, context, 'SUCCESS', { 'Message': 'Resource creation successful!',  'admin_pass': admin_pass, 'db_pass': db_pass });
-  }
+
+
+const s3 = new AWS.S3()
+
+exports.handler = async function(event) {
+  return s3.listBuckets().promise()
+}
+
+// inside handler
+exports.handler = (event, context) => {
+    let secret = "WordPressTest"
+    let params = {
+        "SecretId": secret
+    }
+    var secretsmanager = new AWS.SecretsManager();
+    const request = secretsmanager.getSecretValue(params, function(err, data) {
+       if (err) console.log(err, err.stack); // an error occurred
+       else     console.log(data);           // successful response
+   });
+    
+    request.on('success', function(response) {
+    const value = JSON.parse(response.data.SecretString);
+    console.log(value);
+    sendResponse(event, context, 'SUCCESS', { 'Message': 'Resource creation successful!',  "host": value.host, "user": value.username, "dbpass": value.password});
+    })
+    .on('error', function(error, response) {
+        sendResponse(event, context, 'FAILED');
+    });
 
 }
 
 
 
-function setupWatchdogTimer (event, context, callback) {
-  const timeoutHandler = () => {
-    console.log('Timeout FAILURE!')
-    // Emit event to 'sendResponse', then callback with an error from this
-    // function
-    new Promise(() => sendResponse(event, context, 'FAILED'))
-      .then(() => callback(new Error('Function timed out')))
-  }
-
-  // Set timer so it triggers one second before this function would timeout
-  setTimeout(timeoutHandler, context.getRemainingTimeInMillis() - 1000)
-}
 
 // Send response to the pre-signed S3 URL
 function sendResponse (event, context, responseStatus, responseData) {
